@@ -1,0 +1,21 @@
+{# Global filter bar shared by every analysis page. Submitting reloads the
+   same page with ?state=...&area_type=...&service_type=... in the URL. #}
+<form class="filter-bar" method="get" action="{{ url_for(request.endpoint) }}">
+  {% for column, choices in filter_options.items() %}
+    <label>{{ column_labels[column] }}
+      <select name="{{ column }}" onchange="this.form.submit()">
+        <option value="">All</option>
+        {% for choice in choices %}
+          <option value="{{ choice }}" {{ 'selected' if filters[column] == choice else '' }}>{{ choice }}</option>
+        {% endfor %}
+      </select>
+    </label>
+  {% endfor %}
+  <button class="btn" type="submit">Apply</button>
+  <a class="btn secondary" href="{{ url_for(request.endpoint) }}">Reset</a>
+  {% if filter_query %}
+    <span class="active-note">Filtered view: {% for column, value in filters.items() if value %}{{ value }}{{ ", " if not loop.last }}{% endfor %}</span>
+  {% else %}
+    <span class="active-note">Showing all data</span>
+  {% endif %}
+</form>

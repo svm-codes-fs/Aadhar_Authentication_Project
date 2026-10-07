@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Repeated Failures{% endblock %}
+{% block content %}
+<section class="page-header">
+  <h1>Repeated Failures</h1>
+  <p>"Just try again" is the usual answer to a failed scan. This page checks whether retries actually help, and
+    whether exclusion is random bad luck or keeps happening to the same people.</p>
+</section>
+
+{% include "_filters.html" %}
+
+{% if data is none %}
+  <div class="empty-state">No data for this filter</div>
+{% else %}
+{% set first = data.by_attempt[0] if data.by_attempt else none %}
+{% set last = data.by_attempt[-1] if data.by_attempt else none %}
+<div class="grid grid-2">
+  <section class="card chart-card">
+    <h3>Success rate by attempt number (genuine users)</h3>
+    <div class="chart-box"><canvas id="attempt-chart"></canvas></div>
+    <p class="caption"><strong>What this shows:</strong>
+      {% if first %}{{ first.rate|pct }} of first attempts succeed, but only {{ last.rate|pct }} of attempt {{ last.attempt_no }}
+      ({{ last.count|thousands }} attempts). People who fail once usually have a persistent problem, such as worn
+      fingerprints or a bad device, so retrying helps less each time.{% else %}No data for this filter.{% endif %}</p>
+  </section>
+
+  <section class="card chart-card">
+    <h3>How many times each beneficiary was denied</h3>
+    <div class="chart-box"><canvas id="denials-chart"></canvas></div>
+    <p class="caption"><strong>What this shows:</strong>
+      {% set repeat = namespace(people=0) %}
+      {% for row in data.denial_counts if row.times_denied >= 2 %}{% set repeat.people = repeat.people + row.beneficiaries %}{% endfor %}
+      {% if data.denial_counts %}{{ data.denial_counts[0].share|pct }} of beneficiaries were never denied, but
+      {{ repeat.people|thousands }} were denied on two or more visits. Repeated denial points to systematic
+      exclusion, not bad luck.{% else %}No data for this filter.{% endif %}</p>
+  </section>
+</div>
+
+<section class="card">
+  <h3>10 most-affected beneficiary profiles</h3>
+  <p class="caption" style="margin-top:0">Synthetic IDs, ranked by denied visits, then failed attempts. Every person here is invented.</p>
+  {% if data.most_affected %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Beneficiary</th><th class="num">Age</th><th>Gender</th><th>Occupation</th><th>Area</th>
+        <th>State</th><th>Service</th><th class="num">Visits denied</th><th class="num">Failed attempts</th></tr></thead>
+      <tbody>
+      {% for person in data.most_affected %}
+        <tr><td>{{ person.beneficiary_id }}</td><td class="num">{{ person.age }}</td><td>{{ person.gender }}</td>
+          <td>{{ person.occupation }}</td><td>{{ person.area_type }}</td><td>{{ person.state }}</td>
+          <td>{{ person.service_type }}</td>
+          <td class="num">{{ person.denied_visits }} of {{ person.visits }}</td>
+          <td class="num">{{ person.failed_attempts }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    <div class="empty-state">No data for this filter</div>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if data %}
+<script>
+  const REPEATED = {{ data|tojson }};
+  simpleBarChart(
+    "attempt-chart",
+    REPEATED.by_attempt.map(function (row) { return "Attempt " + row.attempt_no; }),
+    REPEATED.by_attempt.map(function (row) { return row.rate; }),
+    COLORS.teal, "Attempt number within a visit", "Success rate",
+    REPEATED.by_attempt.map(function (row) { return row.count; })
+  );
+  const denialColours = REPEATED.denial_counts.map(function (row) {
+    return row.times_denied === 0 ? COLORS.teal : COLORS.orange;
+  });
+  simpleBarChart(
+    "denials-chart",
+    REPEATED.denial_counts.map(function (row) { return row.times_denied + (row.times_denied === 1 ? " denial" : " denials"); }),
+    REPEATED.denial_counts.map(function (row) { return row.share; }),
+    denialColours, "Number of visits denied (out of each person's visits)", "Share of beneficiaries",
+    REPEATED.denial_counts.map(function (row) { return row.beneficiaries; })
+  );
+</script>
+{% endif %}
+{% endblock %}

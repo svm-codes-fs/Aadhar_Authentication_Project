@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Data Explorer{% endblock %}
+{% block content %}
+<section class="page-header">
+  <h1>Data Explorer</h1>
+  <p>Browse the raw synthetic log: one row per authentication attempt. Use the filters, then download exactly what you see.</p>
+</section>
+
+{# Query string of the current filters, reused by pagination and download links. #}
+{% set ns = namespace(query="") %}
+{% for column, value in chosen.items() if value %}
+  {% set ns.query = ns.query ~ "&" ~ column ~ "=" ~ (value|urlencode) %}
+{% endfor %}
+
+<form class="filter-bar" method="get" action="{{ url_for('explorer') }}">
+  {% for column, choices in options.items() %}
+    <label>{{ column_labels.get(column, column.replace("_", " ")|capitalize) }}
+      <select name="{{ column }}" onchange="this.form.submit()">
+        <option value="">All</option>
+        {% for choice in choices %}
+          <option value="{{ choice }}" {{ 'selected' if chosen[column] == choice }}>{{ choice }}</option>
+        {% endfor %}
+      </select>
+    </label>
+  {% endfor %}
+  <button class="btn" type="submit">Apply</button>
+  <a class="btn secondary" href="{{ url_for('explorer') }}">Reset</a>
+  <a class="btn accent" href="{{ url_for('explorer_download') }}?{{ ns.query[1:] }}">Download filtered CSV</a>
+</form>
+
+<section class="card">
+  <p><strong>{{ total_rows|thousands }}</strong> matching attempts · page {{ page }} of {{ total_pages }}</p>
+  {% if rows %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr>{% for column in columns %}<th>{{ column }}</th>{% endfor %}</tr></thead>
+      <tbody>
+      {% for row in rows %}
+        <tr>
+          {% for column in columns %}
+            {% set value = row[column] %}
+            <td class="{{ 'num' if value is number and value is not boolean }}">
+              {%- if value is none -%}—{%- else -%}{{ value }}{%- endif -%}
+            </td>
+          {% endfor %}
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="pager">
+    {% if page > 1 %}
+      <a class="btn secondary" href="{{ url_for('explorer') }}?page={{ page - 1 }}{{ ns.query }}">← Previous</a>
+    {% else %}<span></span>{% endif %}
+    <span>Page {{ page }} of {{ total_pages }}</span>
+    {% if page < total_pages %}
+      <a class="btn secondary" href="{{ url_for('explorer') }}?page={{ page + 1 }}{{ ns.query }}">Next →</a>
+    {% else %}<span></span>{% endif %}
+  </div>
+  {% else %}
+    <div class="empty-state">No data for this filter</div>
+  {% endif %}
+</section>
+{% endblock %}

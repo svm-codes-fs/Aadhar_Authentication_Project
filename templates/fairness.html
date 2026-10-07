@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Fairness Metrics{% endblock %}
+{% block content %}
+<section class="page-header">
+  <h1>Fairness Metrics</h1>
+  <p>Three standard tests, applied to the <strong>denial rate of genuine visits</strong>:</p>
+  <ul>
+    <li><strong>Disparity ratio</strong>: a group's denial rate divided by the best group's rate (1.0 = equal).</li>
+    <li><strong>Four-fifths rule, adapted to failures</strong>: the classic rule flags a group whose success rate is below 80% of the
+      best group's. For failure rates we flip it: a group <span class="tag fail">FAILS</span> if its denial rate is more than
+      {{ "%.2f"|format(limit) }}x (= 1 / 0.8) the best group's.</li>
+    <li><strong>Chi-square test</strong>: is denial independent of the attribute? A p-value below {{ alpha }} means the
+      differences are unlikely to be chance.</li>
+  </ul>
+  <p class="caption">The best (reference) group must have at least {{ min_group }} visits so a tiny group cannot set the benchmark.</p>
+</section>
+
+{% include "_filters.html" %}
+
+{% if not tables %}
+  <div class="empty-state">No data for this filter</div>
+{% else %}
+<div class="grid grid-2">
+  {% for table in tables %}
+  <section class="card">
+    <h2>{{ table.label }}{% if table.column == "gender" %} <span class="tag muted">control group</span>{% endif %}</h2>
+    {% if table.rows %}
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Group</th><th class="num">Visits</th><th class="num">Denial rate</th>
+          <th class="num">Disparity ratio</th><th>Four-fifths rule</th></tr></thead>
+        <tbody>
+        {% for row in table.rows %}
+          <tr class="{{ 'reference' if row.is_reference }}">
+            <td>{{ row.group }}{% if row.is_reference %} <small>(best)</small>{% endif %}{% if row.small_sample %} <small>(small sample)</small>{% endif %}</td>
+            <td class="num">{{ row.count|thousands }}</td>
+            <td class="num">{{ row.rate|pct }}</td>
+            <td class="num">{{ ("%.2fx"|format(row.ratio)) if row.ratio is not none else "n/a" }}</td>
+            <td>{% if row.passes %}<span class="tag pass">PASS</span>{% else %}<span class="tag fail">FAIL</span>{% endif %}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="caption">Chi-square p-value:
+      <strong>{% if table.p_value is none %}n/a (test cannot run){% elif table.p_value < 0.001 %}&lt; 0.001{% else %}{{ "%.3f"|format(table.p_value) }}{% endif %}</strong>
+      {% if table.p_value is not none %}({{ "significant" if table.significant else "not significant" }} at {{ alpha }}){% endif %}</p>
+    {% else %}
+      <div class="empty-state">No data for this filter</div>
+    {% endif %}
+    <p class="sentence">{{ table.sentence }}</p>
+  </section>
+  {% endfor %}
+</div>
+
+<section class="card chart-card">
+  <h3>What drives a failed first attempt? Logistic regression odds ratios</h3>
+  <div class="chart-box tall"><canvas id="odds-chart"></canvas></div>
+  <p class="caption"><strong>What this shows:</strong>
+    {% if model_result %}
+      {% set top = model_result.odds_ratios[0] %}
+      each bar compares a group with its reference group while holding all other factors constant
+      ({{ model_result.rows_used|thousands }} genuine first attempts, {{ model_result.failure_rate|pct }} failed).
+      Orange bars raise the odds of failure, teal bars lower them. The strongest driver is
+      <strong>{{ top.factor }} {{ top.label }}</strong> at {{ "%.2f"|format(top.odds_ratio) }}x the odds.
+      {% set area_items = model_result.odds_ratios|selectattr("factor", "equalto", "Area type")|list %}
+      {% if area_items %}
+        Area type: {% for item in area_items %}{{ item.label }} {{ "%.2f"|format(item.odds_ratio) }}x{{ ", " if not loop.last }}{% endfor %}.
+        {% if area_items|map(attribute="odds_ratio")|max < 1.5 %}
+          Once device and network are in the model, area itself adds little, which suggests the rural/remote gap
+          on the other pages comes <em>through</em> worse infrastructure.
+        {% endif %}
+      {% endif %}
+    {% else %}Not enough data to fit the model for this filter.{% endif %}</p>
+</section>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if tables %}
+<script>
+  const MODEL = {{ model_result|tojson }};
+  oddsRatioChart("odds-chart", MODEL ? MODEL.odds_ratios : []);
+</script>
+{% endif %}
+{% endblock %}

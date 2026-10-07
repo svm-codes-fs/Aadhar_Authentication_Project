@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}Authentication Simulator{% endblock %}
+
+{# Draws one simulated visit: each attempt appears in turn, then the outcome. #}
+{% macro visit_panel(result, heading) %}
+  <section class="card">
+    <h2>{{ heading }}</h2>
+    <p class="profile-list">Age {{ result.profile.age }} · {{ result.profile.occupation }} · {{ result.profile.area_type }} ·
+      {{ result.profile.device_quality }} device · {{ result.profile.network }} network · {{ result.profile.environment }} ·
+      {{ result.profile.auth_method }}</p>
+
+    {% for attempt in result.attempts %}
+      {% set delay = loop.index0 * 0.9 %}
+      <div class="attempt {{ 'success' if attempt.outcome == 'Success' else 'failure' }}" style="animation-delay: {{ delay }}s">
+        <div class="attempt-head">
+          <span>Attempt {{ attempt.attempt_no }}</span>
+          <span>{% if attempt.outcome == "Success" %}<span class="tag pass">SUCCESS</span>{% else %}<span class="tag fail">FAILED: {{ attempt.failure_reason }}</span>{% endif %}</span>
+        </div>
+
+        <div class="meter-label"><span>Capture quality: <strong>{{ "%.1f"|format(attempt.biometric_quality) }}</strong> / 100</span>
+          <span>minimum {{ result.min_capture_quality }}</span></div>
+        <div class="meter">
+          <div class="fill {{ 'ok' if attempt.biometric_quality >= result.min_capture_quality else 'low' }}"
+               style="width: {{ attempt.biometric_quality }}%; animation-delay: {{ delay }}s"></div>
+          <div class="marker" style="left: {{ result.min_capture_quality }}%" title="Minimum capture quality"></div>
+        </div>
+
+        {% if attempt.match_score is none %}
+          <div class="meter-label"><span>Match score: <strong>not computed</strong>, the attempt stopped at
+            {{ "the network" if attempt.failure_reason == "Network timeout" else "the device" }}.</span></div>
+        {% else %}
+          <div class="meter-label"><span>Match score: <strong>{{ "%.3f"|format(attempt.match_score) }}</strong></span>
+            <span>threshold {{ "%.2f"|format(result.threshold) }}</span></div>
+          <div class="meter">
+            <div class="fill {{ 'ok' if attempt.match_score >= result.threshold else 'low' }}"
+                 style="width: {{ attempt.match_score * 100 }}%; animation-delay: {{ delay }}s"></div>
+            <div class="marker" style="left: {{ result.threshold * 100 }}%" title="Match threshold"></div>
+          </div>
+        {% endif %}
+      </div>
+    {% endfor %}
+
+    <div class="final {{ 'denied' if result.denied else 'received' }}" style="animation-delay: {{ result.attempts|length * 0.9 }}s">
+      {{ result.final_message }}
+    </div>
+    <p class="probability">Estimated denial probability over {{ runs|thousands }} simulated visits:
+      <b>{{ result.denial_probability|pct }}</b></p>
+  </section>
+{% endmacro %}
+
+{% block content %}
+<section class="page-header">
+  <h1>Authentication Simulator</h1>
+  <p>Pick a profile and simulate one visit to a ration shop. The simulator uses <strong>the same rules as the data
+    generator</strong>: quality depends on age, occupation, device and environment; a network or device can fail first;
+    the match score must clear the threshold; up to three attempts are allowed.
+    No Aadhaar number or real biometric is ever requested.</p>
+</section>
+
+<section class="card no-print">
+  <form method="post" action="{{ url_for('simulator_page') }}">
+    <div class="sim-form">
+      <label>Age
+        <input type="number" name="age" min="18" max="100" value="{{ profile.age }}" required>
+      </label>
+      {% for field, label in [("occupation", "Occupation"), ("area_type", "Area type"), ("device_quality", "Device quality"),
+                              ("network", "Network"), ("environment", "Environment"), ("auth_method", "Authentication method")] %}
+        <label>{{ label }}
+          <select name="{{ field }}">
+            {% for option in options[field] %}
+              <option value="{{ option }}" {{ 'selected' if profile[field] == option }}>{{ option }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      {% endfor %}
+    </div>
+    <div class="sim-actions">
+      <button class="btn" type="submit" name="compare" value="no">Simulate visit</button>
+      <button class="btn accent" type="submit" name="compare" value="yes">Compare with a young office worker</button>
+    </div>
+    <p class="caption">Area type has no direct effect in the model: it changes outcomes only by making low-quality devices
+      and poor networks more likely. Here you choose the device and network directly.
+      The comparison person is age {{ comparison_profile.age }}, {{ comparison_profile.occupation }},
+      {{ comparison_profile.area_type }}, {{ comparison_profile.device_quality }} device, {{ comparison_profile.network }} network,
+      {{ comparison_profile.environment }} conditions.</p>
+  </form>
+</section>
+
+{% if result %}
+  {% if comparison %}
+    <div class="grid grid-2">
+      {{ visit_panel(result, "Your profile") }}
+      {{ visit_panel(comparison, "Comparison: young office worker") }}
+    </div>
+    {% if comparison.denial_probability > 0 %}
+      <p class="sentence">Your profile is denied in {{ result.denial_probability|pct }} of simulated visits, which is
+        {{ "%.1f"|format(result.denial_probability / comparison.denial_probability) }} times the comparison person's
+        {{ comparison.denial_probability|pct }}.</p>
+    {% else %}
+      <p class="sentence">Your profile is denied in {{ result.denial_probability|pct }} of simulated visits; the comparison
+        person was denied in {{ comparison.denial_probability|pct }} of {{ runs|thousands }} visits.</p>
+    {% endif %}
+  {% else %}
+    {{ visit_panel(result, "Simulated visit") }}
+  {% endif %}
+{% endif %}
+{% endblock %}

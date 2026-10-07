@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}System & Infrastructure Failures{% endblock %}
+{% block content %}
+<section class="page-header">
+  <h1>System &amp; Infrastructure Failures</h1>
+  <p>Not every failure is about the person's body. A network timeout or a faulty scanner also sends people home.
+    These <strong>system failures</strong> are kept separate from <strong>biometric failures</strong> because they
+    need different fixes: better infrastructure rather than better biometrics.</p>
+</section>
+
+{% include "_filters.html" %}
+
+{% if data is none %}
+  <div class="empty-state">No data for this filter</div>
+{% else %}
+{# Caption helper: name the groups with the highest and lowest total failure rate. #}
+{% macro family_caption(rows) %}
+  {% set rated = rows|selectattr("biometric_rate", "ne", none)|list %}
+  {% if rated %}
+    {% set ns = namespace(worst=rated[0], best=rated[0]) %}
+    {% for row in rated %}
+      {% if row.biometric_rate + row.system_rate > ns.worst.biometric_rate + ns.worst.system_rate %}{% set ns.worst = row %}{% endif %}
+      {% if row.biometric_rate + row.system_rate < ns.best.biometric_rate + ns.best.system_rate %}{% set ns.best = row %}{% endif %}
+    {% endfor %}
+    {{ ns.worst.group }}: {{ ns.worst.biometric_rate|pct }} biometric + {{ ns.worst.system_rate|pct }} system failures, against
+    {{ ns.best.group }}: {{ ns.best.biometric_rate|pct }} biometric + {{ ns.best.system_rate|pct }} system.
+  {% else %}No data for this filter.{% endif %}
+{% endmacro %}
+<div class="grid grid-2">
+  <section class="card chart-card">
+    <h3>Why attempts failed</h3>
+    <div class="chart-box short"><canvas id="reason-chart"></canvas></div>
+    <p class="caption"><strong>What this shows:</strong> {{ data.family_shares.biometric|pct }} of failed attempts were
+      biometric (mismatch or poor capture) and {{ data.family_shares.system|pct }} were system failures (network or device).</p>
+  </section>
+
+  <section class="card chart-card">
+    <h3>Failures by device quality</h3>
+    <div class="chart-box short"><canvas id="device-chart"></canvas></div>
+    <p class="caption"><strong>What this shows:</strong> {{ family_caption(data.device) }}
+      Poor devices raise <em>both</em> kinds of failure: more errors and worse captures.</p>
+  </section>
+
+  <section class="card chart-card">
+    <h3>Failures by network</h3>
+    <div class="chart-box short"><canvas id="network-chart"></canvas></div>
+    <p class="caption"><strong>What this shows:</strong> {{ family_caption(data.network) }}
+      A poor network mainly adds system failures (timeouts).</p>
+  </section>
+
+  <section class="card chart-card">
+    <h3>Failures by environment</h3>
+    <div class="chart-box short"><canvas id="environment-chart"></canvas></div>
+    <p class="caption"><strong>What this shows:</strong> {{ family_caption(data.environment) }}
+      Dust, heat and wet hands degrade fingerprint captures.</p>
+  </section>
+</div>
+
+<section class="card">
+  <h3>Denial rate by area type and device quality</h3>
+  {% set max_rate = namespace(value=0) %}
+  {% for row in data.heatmap.cells %}{% for cell in row %}
+    {% if cell.rate is not none and cell.rate > max_rate.value %}{% set max_rate.value = cell.rate %}{% endif %}
+  {% endfor %}{% endfor %}
+  <div class="table-wrap">
+    <table class="heatmap">
+      <thead><tr><th>Area type \ Device</th>{% for column in data.heatmap.columns %}<th style="text-align:center">{{ column }}</th>{% endfor %}</tr></thead>
+      <tbody>
+      {% for row_name in data.heatmap.rows %}
+        {% set row_index = loop.index0 %}
+        <tr>
+          <th>{{ row_name }}</th>
+          {% for cell in data.heatmap.cells[row_index] %}
+            {% if cell.rate is none %}
+              <td class="cell" style="background:#EEF1F4">—<small>no visits</small></td>
+            {% else %}
+              {% set strength = (cell.rate / max_rate.value) if max_rate.value > 0 else 0 %}
+              <td class="cell" style="background: rgba(217,105,43,{{ '%.2f'|format(0.08 + 0.75 * strength) }})">
+                {{ cell.rate|pct }}<small>{{ cell.count|thousands }} visits</small></td>
+            {% endif %}
+          {% endfor %}
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="caption"><strong>What this shows:</strong> each cell is the share of genuine visits denied for that combination;
+    darker orange means more denials. Reading across a row shows the effect of the device within the same kind of area.
+    Remote and rural areas are not only worse on average: they also receive low-quality devices far more often.</p>
+</section>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if data %}
+<script>
+  const SYSTEM = {{ data|tojson }};
+  reasonChart("reason-chart", SYSTEM.reasons);
+  failureFamilyChart("device-chart", SYSTEM.device, "Device quality");
+  failureFamilyChart("network-chart", SYSTEM.network, "Network");
+  failureFamilyChart("environment-chart", SYSTEM.environment, "Environment");
+</script>
+{% endif %}
+{% endblock %}
