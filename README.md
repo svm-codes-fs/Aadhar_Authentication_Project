@@ -66,9 +66,12 @@ Adhar_Auth_Project/
 │   ├── aadhaar_auth_attempts.csv        The synthetic dataset.
 │   └── generate_aadhaar_auth_dataset.py Seeded generator; ASSUMPTIONS defines every disparity.
 ├── templates/                 base, _filters, overview, exclusion, simulator, method, error.
-├── static/css/style.css       The whole design system: tokens, light/dark, print.
-└── tests/                     test_metrics.py (numbers), test_web.py (read models, pages, API).
+├── static/css/style.css       The whole design system: palette tokens, layout, print.
+├── tests/                     test_metrics.py (numbers), test_web.py (read models, pages, API).
+└── presentation/              15-slide animated deck for the UCS421 presentation.
 ```
+
+Each folder has its own `README.md` with more detail.
 
 ### Architecture
 
