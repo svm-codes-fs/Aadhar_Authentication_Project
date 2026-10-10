@@ -10,11 +10,9 @@ Rules followed throughout (they come from the project brief):
 * "Denial rate" for bias analysis is measured on genuine visits only:
   blocking an impostor is the system working correctly, not exclusion.
 
-Every function returns plain Python lists/dicts so templates and Chart.js
-can use the results directly.
+Every function returns plain Python lists/dicts; analysis/report.py shapes
+them for each screen and the JSON API.
 """
-
-import math
 
 import pandas as pd
 
@@ -22,7 +20,7 @@ import pandas as pd
 BIOMETRIC_REASONS = ["Biometric mismatch", "Poor quality capture"]
 SYSTEM_REASONS = ["Network timeout", "Device error"]
 
-# Quality bands used on the "Biometric Quality vs Failure" page.
+# Quality bands used to show how capture quality decides the outcome.
 QUALITY_BAND_EDGES = [0, 20, 40, 60, 80, 100]
 QUALITY_BAND_LABELS = ["0-20", "20-40", "40-60", "60-80", "80-100"]
 
@@ -51,7 +49,7 @@ COLUMN_LABELS = {
     "auth_method": "Authentication method",
 }
 
-# Global filters offered on the analysis pages.
+# Global filters offered on every analysis screen.
 FILTER_COLUMNS = ["state", "area_type", "service_type"]
 
 
@@ -205,7 +203,7 @@ def beneficiaries_denied_at_least_once(attempts):
 
 
 # -----------------------------------------------------------------------------
-# Overview page
+# Headline numbers
 # -----------------------------------------------------------------------------
 def overview_kpis(attempts):
     """All numbers shown on the KPI cards of the Overview page."""
@@ -228,7 +226,7 @@ def overview_kpis(attempts):
 
 
 # -----------------------------------------------------------------------------
-# Group comparisons (bias dashboard)
+# Group comparisons
 # -----------------------------------------------------------------------------
 def ordered_groups(column, values):
     """Sort group names in their natural order when one is defined."""
@@ -260,55 +258,8 @@ def denial_rate_by_group(attempts, column):
     return rows
 
 
-def frr_by_group(attempts, column):
-    """False Rejection Rate (genuine attempts only) for every group."""
-    genuine = genuine_attempts(attempts)
-    rows = []
-    for group in ordered_groups(column, genuine[column].unique()):
-        group_attempts = genuine[genuine[column] == group]
-        failures = int(group_attempts["is_failure"].sum())
-        rows.append({
-            "group": group,
-            "count": len(group_attempts),
-            "failures": failures,
-            "rate": safe_rate(failures, len(group_attempts)),
-        })
-    return rows
-
-
-def best_and_worst(rows):
-    """Return (best_group, worst_group) by lowest / highest rate.
-
-    WHY: highlighting the extremes makes the gap visible at a glance.
-    """
-    rated = [row for row in rows if row["rate"] is not None]
-    if not rated:
-        return None, None
-    best = min(rated, key=lambda row: row["rate"])
-    worst = max(rated, key=lambda row: row["rate"])
-    return best["group"], worst["group"]
-
-
-def group_chart(rows, column, title, metric_name):
-    """Package one group comparison for Chart.js, with best/worst marked."""
-    best, worst = best_and_worst(rows)
-    rate_of = {row["group"]: row["rate"] for row in rows}
-    return {
-        "best_rate": rate_of.get(best),
-        "worst_rate": rate_of.get(worst),
-        "column": column,
-        "title": title,
-        "metric": metric_name,
-        "labels": [row["group"] for row in rows],
-        "values": [row["rate"] for row in rows],
-        "counts": [row["count"] for row in rows],
-        "best": best,
-        "worst": worst,
-    }
-
-
 # -----------------------------------------------------------------------------
-# Biometric quality page
+# Capture quality
 # -----------------------------------------------------------------------------
 def failure_by_quality_band(attempts):
     """Biometric and system failure rates for each quality band (genuine)."""
@@ -326,30 +277,6 @@ def failure_by_quality_band(attempts):
     return rows
 
 
-def quality_score_points(attempts):
-    """Points for the quality-vs-match-score scatter plot.
-
-    Rows without a match score (network/device failures) are skipped,
-    because no comparison happened. Genuine and impostor points are kept
-    apart so the audience can see the two clouds either side of 0.60.
-    """
-    scored = attempts.dropna(subset=["match_score"])
-    genuine = scored[scored["is_genuine_user"]]
-    impostor = scored[~scored["is_genuine_user"]]
-    return {
-        "genuine": points_from_frame(genuine),
-        "impostor": points_from_frame(impostor),
-    }
-
-
-def points_from_frame(frame):
-    """Turn a frame into a list of {x: quality, y: score} dicts for Chart.js."""
-    points = []
-    for quality, score in zip(frame["biometric_quality"], frame["match_score"]):
-        points.append({"x": float(quality), "y": float(score)})
-    return points
-
-
 def match_threshold(attempts):
     """The threshold used in the data (0.60), read rather than hard-coded."""
     if attempts.empty:
@@ -357,27 +284,8 @@ def match_threshold(attempts):
     return float(attempts["threshold"].iloc[0])
 
 
-def method_comparison(attempts):
-    """Fingerprint vs iris: attempts, FRR, mean quality, visit denial rate."""
-    visits = genuine_visits(attempts)
-    genuine = genuine_attempts(attempts)
-    rows = []
-    for method in ordered_groups("auth_method", genuine["auth_method"].unique()):
-        method_attempts = genuine[genuine["auth_method"] == method]
-        method_visits = visits[visits["auth_method"] == method]
-        rows.append({
-            "method": method,
-            "attempts": len(method_attempts),
-            "visits": len(method_visits),
-            "frr": safe_rate(int(method_attempts["is_failure"].sum()), len(method_attempts)),
-            "mean_quality": float(method_attempts["biometric_quality"].mean()),
-            "denial_rate": visit_denial_rate(method_visits),
-        })
-    return rows
-
-
 # -----------------------------------------------------------------------------
-# System & infrastructure page
+# Failure causes and infrastructure
 # -----------------------------------------------------------------------------
 def failure_reason_breakdown(attempts):
     """Count of failed attempts by reason, tagged biometric or system."""
@@ -406,25 +314,6 @@ def failure_family_shares(attempts):
     }
 
 
-def failure_family_by_group(attempts, column):
-    """Biometric vs system failure rate for each group (genuine attempts).
-
-    WHY: shows whether a group fails because of their fingerprints or
-    because of the device and network they were given.
-    """
-    genuine = genuine_attempts(attempts)
-    rows = []
-    for group in ordered_groups(column, genuine[column].unique()):
-        group_attempts = genuine[genuine[column] == group]
-        rows.append({
-            "group": group,
-            "count": len(group_attempts),
-            "biometric_rate": biometric_failure_rate(group_attempts),
-            "system_rate": system_failure_rate(group_attempts),
-        })
-    return rows
-
-
 def denial_heatmap(attempts, row_column="area_type", column_column="device_quality"):
     """Genuine-visit denial rate for every row x column combination.
 
@@ -448,7 +337,7 @@ def denial_heatmap(attempts, row_column="area_type", column_column="device_quali
 
 
 # -----------------------------------------------------------------------------
-# Repeated failures page
+# Retries
 # -----------------------------------------------------------------------------
 def success_rate_by_attempt_number(attempts):
     """Success rate at attempt 1, 2 and 3 for genuine users.
@@ -466,57 +355,3 @@ def success_rate_by_attempt_number(attempts):
             "rate": safe_rate(successes, len(at_this_try)),
         })
     return rows
-
-
-def denials_per_beneficiary(attempts):
-    """How many beneficiaries were denied 0, 1, 2 or 3 times.
-
-    WHY: separates bad luck (denied once) from systematic exclusion
-    (denied on every visit).
-    """
-    visits = genuine_visits(attempts)
-    if visits.empty:
-        return []
-    denials = visits.groupby("beneficiary_id")["service_denied"].sum()
-    most_visits = int(visits.groupby("beneficiary_id").size().max())
-    rows = []
-    for times in range(0, most_visits + 1):
-        people = int((denials == times).sum())
-        rows.append({
-            "times_denied": times,
-            "beneficiaries": people,
-            "share": safe_rate(people, len(denials)),
-        })
-    return rows
-
-
-def most_affected_beneficiaries(attempts, limit=10):
-    """The beneficiaries with the most denied visits, then most failed attempts."""
-    genuine = genuine_attempts(attempts)
-    if genuine.empty:
-        return []
-    visits = to_visits(genuine)
-    denied_visits = visits.groupby("beneficiary_id")["service_denied"].sum()
-    failed_attempts = genuine.groupby("beneficiary_id")["is_failure"].sum()
-    profile = visits.drop_duplicates("beneficiary_id").set_index("beneficiary_id")
-
-    summary = profile[["age", "age_group", "occupation", "area_type", "state",
-                       "service_type", "gender"]].copy()
-    summary["denied_visits"] = denied_visits
-    summary["failed_attempts"] = failed_attempts
-    summary["visits"] = visits.groupby("beneficiary_id").size()
-    summary = summary.sort_values(["denied_visits", "failed_attempts", "age"],
-                                  ascending=[False, False, False])
-    summary = summary.head(limit).reset_index()
-    return summary.to_dict(orient="records")
-
-
-# -----------------------------------------------------------------------------
-# Data explorer
-# -----------------------------------------------------------------------------
-def paginate(frame, page, page_size):
-    """Return one page of rows plus the total number of pages."""
-    total_pages = max(1, math.ceil(len(frame) / page_size))
-    page = min(max(1, page), total_pages)
-    start = (page - 1) * page_size
-    return frame.iloc[start:start + page_size], page, total_pages

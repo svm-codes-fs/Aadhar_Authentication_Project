@@ -76,8 +76,6 @@ def test_overview_rates_between_zero_and_one(attempts):
 def test_group_rates_between_zero_and_one(attempts, column):
     for row in metrics.denial_rate_by_group(attempts, column):
         assert 0 <= row["rate"] <= 1
-    for row in metrics.frr_by_group(attempts, column):
-        assert 0 <= row["rate"] <= 1
 
 
 def test_group_visit_counts_add_up(attempts):
@@ -94,10 +92,9 @@ def test_failure_families_are_separate(attempts):
     assert system_rows["match_score"].isna().all()
 
 
-def test_denial_distribution_covers_every_beneficiary(attempts):
-    rows = metrics.denials_per_beneficiary(attempts)
-    assert sum(row["beneficiaries"] for row in rows) == \
-        metrics.genuine_visits(attempts)["beneficiary_id"].nunique()
+def test_failure_reason_shares_add_up(attempts):
+    rows = metrics.failure_reason_breakdown(attempts)
+    assert sum(row["share"] for row in rows) == pytest.approx(1.0)
 
 
 # --- Fairness -----------------------------------------------------------------
@@ -126,7 +123,7 @@ def test_empty_filter_is_handled(attempts):
     assert empty.empty
     assert metrics.false_rejection_rate(empty) is None
     assert metrics.visit_denial_rate(metrics.to_visits(empty)) is None
-    assert metrics.denials_per_beneficiary(empty) == []
+    assert metrics.success_rate_by_attempt_number(empty) == []
     assert model.fit_failure_model(empty) is None
     table = fairness.fairness_table(empty, "age_group")
     assert table["rows"] == [] and table["p_value"] is None

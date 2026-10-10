@@ -4,9 +4,10 @@
    All rates arrive as fractions (0.123) and are shown as percentages (12.3%).
    ========================================================================= */
 
-// One palette for every chart (same values as style.css).
+// One palette for every chart. Teal and orange are the same in both themes;
+// the neutral colours are read from style.css so charts follow light/dark mode.
 const COLORS = {
-  navy: "#1F3A5F",
+  navy: "#1F3A5F",      // labels and threshold line (replaced by --heading)
   teal: "#2A8C82",      // success / best group
   orange: "#D9692B",    // failure / worst group
   slate: "#5D6B7E",     // system failures
@@ -15,9 +16,25 @@ const COLORS = {
   text: "#4A5563",
 };
 
+/** Read a colour token from style.css, keeping the default if it is missing. */
+function cssToken(name, fallback) {
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return value || fallback;
+}
+
+/** Refresh the neutral chart colours from the current light/dark theme. */
+function applyThemeColors() {
+  COLORS.navy = cssToken("--heading", COLORS.navy);
+  COLORS.slate = cssToken("--chart-slate", COLORS.slate);
+  COLORS.grey = cssToken("--chart-grey", COLORS.grey);
+  COLORS.gridLine = cssToken("--grey-100", COLORS.gridLine);
+  COLORS.text = cssToken("--grey-700", COLORS.text);
+  Chart.defaults.color = COLORS.text;
+}
+
 Chart.defaults.font.family = "Inter, 'Noto Sans', system-ui, sans-serif";
-Chart.defaults.color = COLORS.text;
 Chart.defaults.animation.duration = 500;
+applyThemeColors();
 
 /** Format a fraction as a percentage with 1 decimal place. */
 function pct(value) {

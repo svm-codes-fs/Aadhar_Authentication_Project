@@ -50,27 +50,54 @@ python -m pytest -q
 
 ```
 Adhar_Auth_Project/
-├── app.py                     Flask routes only (thin). Loads the CSV once at start-up.
+├── app.py                     Entry point: builds the app with web.create_app().
 ├── requirements.txt           Pinned package versions.
-├── analysis/
-│   ├── metrics.py             Every calculation: FRR, FAR, denial rates, group rates, heatmap, etc.
-│   ├── fairness.py            Disparity ratio, adapted four-fifths rule, chi-square test, plain-English sentences.
-│   ├── simulator.py           Simulates one visit for a user-entered profile (reuses the generator's logic).
-│   └── model.py               One logistic regression explaining failure drivers as odds ratios.
+├── analysis/                  Pure calculations. No Flask, no HTML.
+│   ├── metrics.py             FRR, FAR, denial rates, group rates, failure causes.
+│   ├── fairness.py            Disparity ratio, adapted four-fifths rule, chi-square test.
+│   ├── model.py               Logistic regression: failure drivers as odds ratios.
+│   ├── simulator.py           One visit for a chosen profile vs a baseline (reuses the generator).
+│   └── report.py              Read models: one per screen, cached per filter combination.
+├── web/                       HTTP only: parse the request, call report, render.
+│   ├── __init__.py            create_app(): config, security headers, errors, /healthz.
+│   ├── pages.py               The four HTML screens, CSV download, redirects from old URLs.
+│   └── api.py                 JSON API (/api/v1) serving the same read models.
 ├── data/
-│   ├── aadhaar_auth_attempts.csv        The synthetic dataset analysed by the dashboard.
-│   └── generate_aadhaar_auth_dataset.py Seeded generator; the ASSUMPTIONS block defines every disparity.
-├── templates/
-│   ├── base.html              Layout, navigation bar, "simulated data" banner.
-│   ├── _filters.html          Global filter bar (state, area type, service).
-│   └── overview / bias / quality / system / repeated / fairness / simulator / methodology / explorer .html
-├── static/
-│   ├── css/style.css          Plain CSS: palette, cards, responsive and print styles.
-│   └── js/charts.js           Reusable Chart.js helpers (Chart.js is loaded from a CDN).
-├── tests/
-│   └── test_metrics.py        pytest checks of the key numbers.
-├── README.md
-└── PRESENTATION_GUIDE.md      Demo script, key findings, viva questions.
+│   ├── aadhaar_auth_attempts.csv        The synthetic dataset.
+│   └── generate_aadhaar_auth_dataset.py Seeded generator; ASSUMPTIONS defines every disparity.
+├── templates/                 base, _filters, overview, exclusion, simulator, method, error.
+├── static/css/style.css       The whole design system: tokens, light/dark, print.
+└── tests/                     test_metrics.py (numbers), test_web.py (read models, pages, API).
+```
+
+### Architecture
+
+```
+            ┌──────────── web/ ────────────┐
+ browser ──►│ pages.py  (HTML, no JS)      │
+ client  ──►│ api.py    (JSON, /api/v1)    │──► analysis/report.py ──► metrics · fairness · model
+            └──────────────────────────────┘     (read models, cached)        (pure functions)
+                                                          ▲
+                                     data/aadhaar_auth_attempts.csv, loaded once at start-up
+```
+
+* **One source of truth.** Every chart and every API response comes from the same read-model function, so the page
+  and the API cannot disagree.
+* **Cached, read-only.** The CSV never changes while running, so each screen is computed once per filter combination
+  (at most 140) and reused. Filter values not present in the data are discarded before they reach the cache.
+* **No client-side JavaScript.** Bars, columns and the heatmap are HTML/CSS with server-computed sizes. Every view,
+  including filters and the chosen comparison, is a plain shareable URL.
+* **Hardened by default.** Strict Content-Security-Policy, `nosniff`, no framing, JSON errors under `/api`, and a
+  `/healthz` endpoint for a load balancer.
+
+### Running in production
+
+```bash
+pip install waitress
+```
+
+```bash
+waitress-serve --port=8000 --call web:create_app
 ```
 
 **Note on the generator:** the original generator script was not supplied with the dataset. The file in `data/` is a
@@ -79,21 +106,26 @@ the supplied CSV. The dashboard always analyses the original CSV unchanged. The 
 Simulator and the Methodology page. Re-running it with the default seed gives a statistically similar dataset
 (about 7,860 attempts, FRR about 24%), not an identical one.
 
-## 4. Pages
+## 4. Screens
 
-| # | Page | What it shows |
-|---|------|---------------|
-| 1 | Overview | Plain-language problem statement and KPI cards (attempts, failure rate, FRR, FAR, visits denied, people denied at least once) |
-| 2 | Who Gets Excluded? | Denial rate and FRR by age group, occupation, area type, gender (control group), state and service, with best and worst groups highlighted |
-| 3 | Biometric Quality | Failure rate by quality band, quality-vs-score scatter with the 0.60 threshold, fingerprint vs iris |
-| 4 | System Failures | Failure reasons (biometric vs system), failures by device, network and environment, area × device heatmap |
-| 5 | Repeated Failures | Success rate by attempt number, denials per beneficiary, 10 most-affected profiles |
-| 6 | Fairness Metrics | Disparity ratio, four-fifths flag and chi-square p-value per attribute, plain-English sentences, odds-ratio chart |
-| 7 | Simulator | Enter a profile, watch up to 3 animated attempts, see the outcome and the denial probability from 1,000 runs, and compare with a young office worker |
-| 8 | Methodology | Generation process, live assumptions table, metric definitions, limitations, recommendations |
-| 9 | Data Explorer | Filterable, paginated raw table with a "Download filtered CSV" button |
+| Screen | URL | What it shows |
+|------|-----|---------------|
+| Overview | `/` | The headline gap, four key numbers, denial by age, the FRR/FAR trade-off, four tested findings |
+| Who is excluded | `/exclusion?by=age_group` | Denial rate per group with the four-fifths verdict and chi-square test (age, occupation, area, service, state, gender), odds-ratio drivers, failure by capture quality, biometric vs system causes, retries, area × device heatmap |
+| Simulator | `/simulator` | One visit for a chosen profile, side by side with a young office worker, plus the denial probability over 1,000 runs |
+| Method & data | `/method` | How the data was generated, live assumptions, definitions, limitations, recommendations, CSV download, API |
 
-Pages 1 to 6 share a global filter bar (state, area type, service). Chosen filters follow you between those pages.
+Overview and Who is excluded share a filter bar (state, area, service); filters follow you between them. The nine
+pages of the first version redirect to these four, so old links keep working.
+
+### JSON API
+
+| Method | Path | Returns |
+|---|---|---|
+| GET | `/api/v1/meta` | Filter values, dimensions, thresholds |
+| GET | `/api/v1/overview?state=Bihar` | The overview read model |
+| GET | `/api/v1/exclusion?by=occupation&area_type=Remote` | The exclusion read model |
+| POST | `/api/v1/simulate` with `{"age": 68, "occupation": "Farmer"}` | Subject vs baseline simulation |
 
 ## 5. Metric definitions
 
@@ -112,20 +144,17 @@ Pages 1 to 6 share a global filter bar (state, area type, service). Chosen filte
 
 ## 6. Screenshot list (for the report)
 
-Use the browser's print preview (the stylesheet has a print mode that hides navigation and filters) or a screenshot tool.
+Use the browser's print preview (the stylesheet hides navigation and filters when printing) or a screenshot tool.
 
-1. **Overview**: banner and KPI cards.
-2. **Who Gets Excluded? (Age group)**: denial-rate and FRR charts showing the 75+ group in orange.
-3. **Who Gets Excluded? (Gender)**: the control-group note with near-identical bars.
-4. **Biometric Quality**: failure rate by quality band.
-5. **Biometric Quality**: quality vs match-score scatter with the threshold line.
-6. **System Failures**: failure-reason chart and the area × device heatmap.
-7. **Repeated Failures**: success rate by attempt number and the most-affected table.
-8. **Fairness Metrics**: age-group table (FAIL flags) and the odds-ratio chart.
-9. **Simulator**: compare view (elderly manual labourer vs young office worker).
-10. **Methodology**: assumptions table.
-11. **Filtered view**: e.g. Fairness Metrics with *Area type = Remote*, to show the filters working.
-12. **Phone layout**: any page at phone width, to show the responsive design.
+1. **Overview**: headline, key numbers and the four findings.
+2. **Who is excluded, Age**: the 75+ bar in orange and the FAIL verdicts.
+3. **Who is excluded, Gender**: the control check with no significant gap.
+4. **Who is excluded, drivers**: the odds-ratio chart.
+5. **Who is excluded, causes**: failure by capture quality, and the area × device heatmap.
+6. **Simulator**: an elderly manual labourer next to the baseline.
+7. **Method & data**: the assumptions table.
+8. **Filtered view**: e.g. Who is excluded with *Area = Remote*.
+9. **Phone layout**: any screen at phone width.
 
 ## 7. How to regenerate data with different assumptions
 
