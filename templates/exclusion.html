@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+{% block title %}Who is excluded{% endblock %}
+{% block content %}
+<section class="page-head">
+  <p class="eyebrow">Group gaps · fairness tests · causes</p>
+  <h1>Who is excluded, and why</h1>
+  <p class="lede">Denial rates are measured on genuine visits only: blocking an impostor is the system working,
+    not exclusion. Each gap is tested against the four-fifths rule and a chi-square test.</p>
+</section>
+
+{% set keep_dimension = data.dimension if data else request.args.get('by', '') %}
+{% include "_filters.html" %}
+
+{% if not data %}
+  <p class="empty">No visits match these filters.</p>
+{% else %}
+<nav class="tabs" aria-label="Compare groups by">
+  {% for key, label in dimensions.items() %}
+    <a href="{{ url_for('pages.exclusion', by=key, **filters.active()) }}"{% if key == data.dimension %} aria-current="true"{% endif %}>{{ label }}</a>
+  {% endfor %}
+</nav>
+
+<div class="split split-wide">
+  <section class="panel">
+    <header class="panel-head"><h2>Denial rate by {{ data.label|lower }}</h2></header>
+    <div class="scroll-x">
+      <table class="gap-table">
+        <thead>
+          <tr><th scope="col">Group</th><th scope="col" class="col-bar">Visits denied</th>
+            <th scope="col" class="num">Visits</th><th scope="col" class="num">vs best</th><th scope="col">4/5 rule</th></tr>
+        </thead>
+        <tbody>
+          {% for row in data.groups %}
+            <tr{% if row.is_reference %} class="is-ref"{% endif %}>
+              <th scope="row">{{ row.group }}{% if row.is_reference %} <span class="tag">reference</span>{% endif %}</th>
+              <td class="col-bar">
+                <span class="inline-bar">
+                  <span class="bar-track"><span class="bar-fill{{ ' harm' if not row.passes }}" style="width: {{ row.width }}%"></span></span>
+                  <span class="bar-value">{{ row.rate|pct }}</span>
+                </span>
+              </td>
+              <td class="num">{{ row.count|thousands }}</td>
+              <td class="num">{{ row.ratio|ratio if not row.is_reference else '1.0×' }}</td>
+              <td>
+                {% if row.small_sample %}<span class="verdict is-na">Too few</span>
+                {% elif row.passes %}<span class="verdict is-pass">Pass</span>
+                {% else %}<span class="verdict is-fail">Fail</span>{% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="caption">A group fails the adapted four-fifths rule when its denial rate exceeds
+      {{ limit|round(2) }}× the reference (the lowest-rate group with at least 30 visits).</p>
+  </section>
+
+  <aside class="panel verdict-panel" aria-label="Summary">
+    {% if data.gap %}
+      <p class="stat-label">Largest gap</p>
+      <p class="stat-value harm">{{ data.gap.ratio|ratio }}</p>
+      <p class="body"><strong>{{ data.gap.group }}</strong> are denied on {{ data.gap.rate|pct }} of visits,
+        against {{ data.gap.reference_rate|pct }} for <strong>{{ data.gap.reference }}</strong>.</p>
+      {% if data.gap.rare_reference %}<p class="caption">The reference group is almost never denied, which inflates the ratio.</p>{% endif %}
+    {% else %}
+      <p class="stat-label">Largest gap</p>
+      <p class="stat-value">None</p>
+      <p class="body">No group stands out under these filters.</p>
+    {% endif %}
+    <p class="badge {{ 'is-sig' if data.significant else 'is-ns' }}">
+      {{ 'Statistically significant' if data.significant else 'Not significant' }} · {{ data.p_value|pvalue }}</p>
+    {% if data.dimension == 'gender' %}
+      <p class="caption"><strong>Control check.</strong> The simulation has no gender effect, so no gap should appear here.
+        It shows the method does not invent bias.</p>
+    {% endif %}
+  </aside>
+</div>
+
+<section class="section">
+  <h2 class="section-title">What raises the odds of failure, all else equal</h2>
+  <div class="panel">
+    {% if data.drivers %}
+      <ol class="bars bars-wide" aria-label="Odds ratios for a failed first attempt">
+        {% for d in data.drivers.raising %}
+          <li class="bar-row">
+            <span class="bar-label">{{ d.group }} <small>{{ d.factor }} · vs {{ d.reference }}</small></span>
+            <span class="bar-track"><span class="bar-fill{{ ' harm' if loop.first }}" style="width: {{ d.width }}%"></span></span>
+            <span class="bar-value">{{ "%.1f"|format(d.odds_ratio) }}×</span>
+          </li>
+        {% endfor %}
+      </ol>
+      <p class="caption">Odds ratios from a logistic regression of first-attempt failure on {{ data.drivers.rows_used|thousands }}
+        genuine visits, log scale.
+        {% if data.drivers.lowering %}Lower odds:
+          {% for d in data.drivers.lowering[:4] %}{{ d.group }} ({{ "%.2f"|format(d.odds_ratio) }}×){{ ", " if not loop.last }}{% endfor %}.
+          {% if data.drivers.lowering|selectattr('factor', 'equalto', 'Area type')|list %}With device and network held constant,
+          area itself does not raise the odds: the rural gap comes through infrastructure.{% endif %}{% endif %}</p>
+    {% else %}
+      <p class="empty">Too few visits under these filters to fit the model reliably.</p>
+    {% endif %}
+  </div>
+</section>
+
+<section class="section">
+  <h2 class="section-title">Why scans fail</h2>
+  <div class="split">
+    <div class="panel">
+      <header class="panel-head"><h3>Failure rate by capture quality</h3></header>
+      <ol class="columns" aria-label="Failure rate of genuine attempts by capture quality band">
+        {% for band in data.quality %}
+          <li>
+            <span class="column-value">{{ band.failure_rate|pct(0) }}</span>
+            <span class="column-track"><span class="column-fill{{ ' harm' if band.failure_rate and band.failure_rate > 0.5 }}" style="height: {{ band.width }}%"></span></span>
+            <span class="column-label">{{ band.band }}</span>
+          </li>
+        {% endfor %}
+      </ol>
+      <p class="caption">Quality score 0 to 100. Below about 40, most genuine attempts fail.</p>
+    </div>
+    <div class="panel">
+      <header class="panel-head"><h3>What failed</h3></header>
+      <div class="stack" role="img" aria-label="{{ data.families.biometric|pct(0) }} biometric, {{ data.families.system|pct(0) }} system">
+        <span class="stack-bio" style="width: {{ (data.families.biometric or 0) * 100 }}%">Biometric {{ data.families.biometric|pct(0) }}</span>
+        <span class="stack-sys" style="width: {{ (data.families.system or 0) * 100 }}%">System {{ data.families.system|pct(0) }}</span>
+      </div>
+      <ul class="reasons">
+        {% for r in data.reasons %}
+          <li><span class="dot dot-{{ r.family|lower }}" aria-hidden="true"></span>{{ r.reason }}
+            <span class="num">{{ r.count|thousands }} · {{ r.share|pct(0) }}</span></li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <h2 class="section-title">Retrying does not fix it</h2>
+  <div class="split">
+    <div class="panel">
+      <header class="panel-head"><h3>Success rate by attempt</h3></header>
+      <ol class="columns columns-3" aria-label="Success rate of genuine attempts by attempt number">
+        {% for r in data.retries %}
+          <li>
+            <span class="column-value">{{ r.rate|pct(0) }}</span>
+            <span class="column-track"><span class="column-fill" style="height: {{ r.width }}%"></span></span>
+            <span class="column-label">Attempt {{ r.attempt_no }}</span>
+          </li>
+        {% endfor %}
+      </ol>
+      <p class="caption">The cause, a worn fingerprint or a poor scanner, is still there on the next try.
+        {{ data.repeat_denied.people|thousands }} people were denied on two or more visits.</p>
+    </div>
+    <div class="panel">
+      <header class="panel-head"><h3>Denial rate by area and device</h3></header>
+      {% set hm = data.infrastructure %}
+      <div class="scroll-x">
+        <table class="heat">
+          <thead><tr><th scope="col"><span class="sr">Area</span></th>{% for c in hm.columns %}<th scope="col">{{ c }} device</th>{% endfor %}</tr></thead>
+          <tbody>
+            {% for row_name in hm.rows %}
+              <tr><th scope="row">{{ row_name }}</th>
+                {% for cell in hm.cells[loop.index0] %}
+                  {% set level = 0 if cell.rate is none else (4 if cell.rate >= 0.08 else 3 if cell.rate >= 0.04 else 2 if cell.rate >= 0.02 else 1) %}
+                  <td class="heat-{{ level }}">{{ cell.rate|pct }}<small>{{ cell.count|thousands }} visits</small></td>
+                {% endfor %}
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="caption">Remote areas mostly receive low-quality devices, and that is where denial concentrates.</p>
+    </div>
+  </div>
+</section>
+{% endif %}
+{% endblock %}

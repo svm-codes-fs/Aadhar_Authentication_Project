@@ -2,12 +2,14 @@
 Simulate an authentication visit for a profile typed in by the user.
 
 The simulator does NOT invent new rules: it calls `simulate_visit` from the
-data generator, so the animated result follows exactly the same assumptions
+data generator, so each simulated visit follows exactly the same assumptions
 that produced the dataset.
 
 No real Aadhaar number or biometric is ever asked for. The user only picks
 a profile (age, occupation, device...).
 """
+
+from functools import lru_cache
 
 import numpy as np
 
@@ -91,8 +93,15 @@ def estimate_denial_probability(profile, runs=DEFAULT_RUNS, seed=2026):
     """Run many visits and return the share that ended in denial.
 
     WHY: one animated run can be lucky or unlucky. 1,000 runs give a stable
-    estimate of how often this kind of person is turned away.
+    estimate of how often this kind of person is turned away. The estimate
+    is deterministic (fixed seed), so it is cached per profile.
     """
+    return _cached_denial_probability(tuple(sorted(profile.items())), runs, seed)
+
+
+@lru_cache(maxsize=512)
+def _cached_denial_probability(profile_items, runs, seed):
+    profile = dict(profile_items)
     rng = np.random.default_rng(seed)
     denied = 0
     for _ in range(runs):
@@ -102,7 +111,7 @@ def estimate_denial_probability(profile, runs=DEFAULT_RUNS, seed=2026):
 
 
 def simulate_profile(profile, seed=None):
-    """Everything the simulator page shows for one profile."""
+    """One animated visit plus the long-run denial estimate for a profile."""
     rng = np.random.default_rng(seed)
     attempts = run_one_visit(profile, rng)
     denied = visit_was_denied(attempts)
@@ -110,8 +119,26 @@ def simulate_profile(profile, seed=None):
         "profile": profile,
         "attempts": attempts,
         "denied": denied,
-        "final_message": "Service denied" if denied else "Ration received",
         "denial_probability": estimate_denial_probability(profile),
+    }
+
+
+def compare_with_baseline(profile, seed=None):
+    """Simulate the chosen profile side by side with the baseline person.
+
+    WHY: a single denial probability means little on its own; next to a
+    young office worker with good equipment the gap is obvious.
+    """
+    subject = simulate_profile(profile, seed)
+    baseline = simulate_profile(COMPARISON_PROFILE, seed)
+    ratio = None
+    if baseline["denial_probability"] > 0:
+        ratio = subject["denial_probability"] / baseline["denial_probability"]
+    return {
+        "subject": subject,
+        "baseline": baseline,
+        "ratio": ratio,
+        "runs": DEFAULT_RUNS,
         "threshold": ASSUMPTIONS["match_threshold"],
         "min_capture_quality": ASSUMPTIONS["min_capture_quality"],
     }
