@@ -1,0 +1,270 @@
+{
+ "assumptions": {
+  "seed": 42,
+  "n_beneficiaries": 2000,
+  "visits_per_beneficiary": 3,
+  "max_attempts_per_visit": 3,
+  "match_threshold": 0.6,
+  "min_capture_quality": 40,
+  "fingerprint_base_quality": 82.0,
+  "occupation_quality_effect": {
+   "Office/Skilled": 0.0,
+   "Student": 1.0,
+   "Retired/Not working": -2.5,
+   "Domestic worker": -12.0,
+   "Farmer": -15.0,
+   "Manual labourer": -17.0,
+   "Construction worker": -19.5
+  },
+  "device_quality_effect": {
+   "High": 0.0,
+   "Medium": -5.7,
+   "Low": -13.5
+  },
+  "environment_quality_effect": {
+   "Normal": 0.0,
+   "Hot & dry": -5.8,
+   "Dusty": -6.9,
+   "Humid/wet hands": -8.2
+  },
+  "age_decline_starts_at": 55,
+  "age_decline_per_year": 0.85,
+  "person_noise_sd": 4.0,
+  "visit_noise_sd": 4.0,
+  "attempt_noise_sd": 6.0,
+  "retry_quality_gain": 4.0,
+  "iris_quality_mean": 85.0,
+  "iris_quality_sd": 6.0,
+  "iris_share_on_high_device": 0.066,
+  "match_intercept": 0.3,
+  "match_slope_per_quality_point": 0.0074,
+  "match_noise_sd": 0.078,
+  "impostor_visit_share": 0.02,
+  "impostor_quality_mean": 60.0,
+  "impostor_quality_sd": 16.0,
+  "impostor_match_mean": 0.36,
+  "impostor_match_sd": 0.08,
+  "network_timeout_probability": {
+   "Good": 0.01,
+   "Poor": 0.107
+  },
+  "device_error_probability": {
+   "High": 0.007,
+   "Medium": 0.015,
+   "Low": 0.038
+  },
+  "device_mix_by_area": {
+   "Urban": {
+    "High": 0.45,
+    "Medium": 0.43,
+    "Low": 0.12
+   },
+   "Rural": {
+    "High": 0.22,
+    "Medium": 0.43,
+    "Low": 0.35
+   },
+   "Remote": {
+    "High": 0.09,
+    "Medium": 0.34,
+    "Low": 0.57
+   }
+  },
+  "poor_network_share_by_area": {
+   "Urban": 0.11,
+   "Rural": 0.37,
+   "Remote": 0.67
+  },
+  "environment_mix": {
+   "Normal": 0.54,
+   "Hot & dry": 0.2,
+   "Dusty": 0.15,
+   "Humid/wet hands": 0.11
+  },
+  "area_mix_by_state": {
+   "Andhra Pradesh": {
+    "Urban": 0.34,
+    "Rural": 0.48,
+    "Remote": 0.18
+   },
+   "Bihar": {
+    "Urban": 0.16,
+    "Rural": 0.66,
+    "Remote": 0.18
+   },
+   "Delhi": {
+    "Urban": 0.95,
+    "Rural": 0.04,
+    "Remote": 0.01
+   },
+   "Jharkhand": {
+    "Urban": 0.19,
+    "Rural": 0.62,
+    "Remote": 0.19
+   },
+   "Maharashtra": {
+    "Urban": 0.52,
+    "Rural": 0.38,
+    "Remote": 0.1
+   },
+   "Rajasthan": {
+    "Urban": 0.24,
+    "Rural": 0.57,
+    "Remote": 0.19
+   }
+  },
+  "age_group_mix": {
+   "18-30": 0.251,
+   "31-45": 0.289,
+   "46-60": 0.289,
+   "61-75": 0.134,
+   "75+": 0.037
+  },
+  "age_group_range": {
+   "18-30": [
+    18,
+    30
+   ],
+   "31-45": [
+    31,
+    45
+   ],
+   "46-60": [
+    46,
+    60
+   ],
+   "61-75": [
+    61,
+    75
+   ],
+   "75+": [
+    76,
+    90
+   ]
+  },
+  "occupation_mix_by_age_group": {
+   "18-30": {
+    "Student": 0.28,
+    "Farmer": 0.18,
+    "Manual labourer": 0.17,
+    "Office/Skilled": 0.14,
+    "Domestic worker": 0.12,
+    "Construction worker": 0.11
+   },
+   "31-45": {
+    "Manual labourer": 0.28,
+    "Farmer": 0.23,
+    "Office/Skilled": 0.17,
+    "Construction worker": 0.18,
+    "Domestic worker": 0.14
+   },
+   "46-60": {
+    "Manual labourer": 0.26,
+    "Office/Skilled": 0.24,
+    "Farmer": 0.19,
+    "Domestic worker": 0.17,
+    "Construction worker": 0.14
+   },
+   "61-75": {
+    "Retired/Not working": 0.37,
+    "Farmer": 0.27,
+    "Manual labourer": 0.22,
+    "Office/Skilled": 0.05,
+    "Construction worker": 0.05,
+    "Domestic worker": 0.04
+   },
+   "75+": {
+    "Retired/Not working": 0.49,
+    "Farmer": 0.32,
+    "Manual labourer": 0.19
+   }
+  },
+  "service_mix_by_age_group": {
+   "18-30": {
+    "PDS ration": 0.46,
+    "MGNREGA wages": 0.31,
+    "AePS banking": 0.23
+   },
+   "31-45": {
+    "PDS ration": 0.46,
+    "MGNREGA wages": 0.29,
+    "AePS banking": 0.25
+   },
+   "46-60": {
+    "PDS ration": 0.45,
+    "MGNREGA wages": 0.31,
+    "AePS banking": 0.22,
+    "Old-age pension": 0.02
+   },
+   "61-75": {
+    "Old-age pension": 0.58,
+    "PDS ration": 0.21,
+    "MGNREGA wages": 0.11,
+    "AePS banking": 0.1
+   },
+   "75+": {
+    "Old-age pension": 0.7,
+    "PDS ration": 0.13,
+    "AePS banking": 0.11,
+    "MGNREGA wages": 0.06
+   }
+  },
+  "female_share": 0.49
+ },
+ "form_options": {
+  "occupation": [
+   "Office/Skilled",
+   "Student",
+   "Retired/Not working",
+   "Domestic worker",
+   "Farmer",
+   "Manual labourer",
+   "Construction worker"
+  ],
+  "area_type": [
+   "Urban",
+   "Rural",
+   "Remote"
+  ],
+  "device_quality": [
+   "High",
+   "Medium",
+   "Low"
+  ],
+  "network": [
+   "Good",
+   "Poor"
+  ],
+  "environment": [
+   "Normal",
+   "Hot & dry",
+   "Dusty",
+   "Humid/wet hands"
+  ],
+  "auth_method": [
+   "Fingerprint",
+   "Iris"
+  ]
+ },
+ "default_profile": {
+  "age": 68,
+  "occupation": "Manual labourer",
+  "area_type": "Remote",
+  "device_quality": "Low",
+  "network": "Poor",
+  "environment": "Dusty",
+  "auth_method": "Fingerprint"
+ },
+ "comparison_profile": {
+  "age": 25,
+  "occupation": "Office/Skilled",
+  "area_type": "Urban",
+  "device_quality": "High",
+  "network": "Good",
+  "environment": "Normal",
+  "auth_method": "Fingerprint"
+ },
+ "runs": 1000,
+ "min_age": 18,
+ "max_age": 100
+}
