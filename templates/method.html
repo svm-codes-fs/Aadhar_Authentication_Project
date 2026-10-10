@@ -92,7 +92,49 @@
   </div>
 </section>
 
-<div class="split">
+<section class="section">
+  <h2 class="section-title">Ethics and risk lens</h2>
+  <p class="lede">The matcher has no bug: it applies one threshold to everyone, exactly as designed. The harm is an
+    ethical failure, not a technical one, so it is read against the four core principles of responsible AI.</p>
+  <div class="panel scroll-x" style="margin-top: 18px">
+    <table class="table">
+      <thead><tr><th scope="col">Principle</th><th scope="col">What goes wrong here</th><th scope="col">What this study does</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Fairness</strong></td><td>Works on average ({{ kpis.visit_denial_rate_genuine|pct }} of genuine visits denied) but fails the elderly, manual workers and remote areas far more often</td><td>Measures denial per group and tests it with the four-fifths rule and chi-square</td></tr>
+        <tr><td><strong>Accountability</strong></td><td>When a pensioner is turned away, no one answers for it; &ldquo;the machine said no&rdquo;</td><td>Recommends fallbacks, manual override and on-the-spot grievance redressal</td></tr>
+        <tr><td><strong>Transparency</strong></td><td>A denied person is not told whether it was poor capture, a mismatch or the network</td><td>Separates biometric from system failures; documents every assumption</td></tr>
+        <tr><td><strong>Privacy</strong></td><td>Fingerprints and iris scans are sensitive, directly identifying personal data</td><td>Uses synthetic data only; collects and stores nothing personal</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<div class="split section">
+  <section class="panel">
+    <h2>Where bias enters the pipeline</h2>
+    <ol class="numbered">
+      <li><strong>Collect &middot; measurement bias.</strong> Scanners capture worn or dusty fingers poorly; manual work costs 12 to 20 quality points.</li>
+      <li><strong>Set the objective &middot; evaluation bias.</strong> One threshold ({{ "%.2f"|format(threshold) }}) is tuned for security: few impostors get through, many genuine users are rejected.</li>
+      <li><strong>Deploy &middot; deployment bias.</strong> Remote and rural areas are given low-quality devices and poor networks more often.</li>
+      <li><strong>Impact &middot; disparate impact.</strong> The elderly and manual workers are denied many times more often.</li>
+      <li><strong>Feedback &middot; hidden exclusion.</strong> People who give up after repeated denials never appear in the logs.</li>
+    </ol>
+  </section>
+  <section class="panel">
+    <h2>Privacy and governance</h2>
+    <p class="body">Under India's Digital Personal Data Protection (DPDP) Act, our mapping of the roles:</p>
+    <ul class="list">
+      <li><strong>Data principal:</strong> the beneficiary whose fingerprint is scanned.</li>
+      <li><strong>Data fiduciary:</strong> UIDAI and the department running the scheme.</li>
+      <li><strong>Data processor:</strong> authentication agencies and device operators.</li>
+    </ul>
+    <p class="body" style="margin-top: 12px">A privacy impact assessment of authentication: <strong>identify</strong> the data
+      (biometrics, highly sensitive), <strong>assess</strong> the risk (exclusion of the most vulnerable), <strong>mitigate</strong>
+      (the recommendations below) and <strong>document</strong> (publish denial rates and the four-fifths audit).</p>
+  </section>
+</div>
+
+<div class="split section">
   <section class="panel">
     <h2>Limitations</h2>
     <ul class="list">
@@ -111,6 +153,7 @@
       <li><strong>Better devices first where they are worst.</strong> Replace low-quality scanners in rural and remote areas.</li>
       <li><strong>Offline mode.</strong> Authenticate locally when the network is down and reconcile later.</li>
       <li><strong>Exemptions.</strong> Alternative proof for people aged 75+ and manual workers with worn fingerprints.</li>
+      <li><strong>Grievance redressal.</strong> On-the-spot help and a stated reason for every denial.</li>
       <li><strong>Monitoring.</strong> Publish denial rates by age, occupation and area, with the four-fifths check.</li>
     </ul>
   </section>
