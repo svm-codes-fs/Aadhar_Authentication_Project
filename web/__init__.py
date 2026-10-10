@@ -7,6 +7,7 @@ HTTP layer. `create_app()` wires one read-only Report into two front doors:
 Nothing in this package calculates; it parses requests and renders results.
 """
 
+import hashlib
 from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request
@@ -44,6 +45,11 @@ def create_app(data_file=DEFAULT_DATA_FILE, report=None):
     from web import api, pages
     app.register_blueprint(pages.bp)
     app.register_blueprint(api.bp, url_prefix="/api/v1")
+
+    # Fingerprint the stylesheet so a changed file gets a new URL and no
+    # browser keeps showing a stale cached copy.
+    stylesheet = ROOT / "static" / "css" / "style.css"
+    app.jinja_env.globals["asset_version"] = hashlib.sha256(stylesheet.read_bytes()).hexdigest()[:10]
 
     register_template_filters(app)
     register_hardening(app)
