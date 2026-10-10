@@ -1,80 +1,114 @@
 {% extends "base.html" %}
 {% block title %}Overview{% endblock %}
 {% block content %}
-<section class="page-header">
-  <h1>Aadhaar Biometric Authentication Failures</h1>
-  <p><strong>A case of algorithmic and system bias in national infrastructure.</strong>
-    Welfare services in India, such as PDS rations, old-age pensions, MGNREGA wages and AePS banking, often
-    require a fingerprint or iris match before a person receives what they are entitled to.
-    When the match fails, a <em>genuine</em> beneficiary can be sent home empty-handed.</p>
-  <p>This platform uses a <strong>simulated</strong> log of authentication attempts to ask a simple question:
-    <em>who carries the cost when biometric authentication fails?</em> Elderly people, manual labourers and people in
-    rural or remote areas with poor devices or connectivity are expected to be hit hardest. The pages below measure
-    whether, and how much.</p>
+{% set k = data.kpis if data %}
+<section class="page-head">
+  <p class="eyebrow">A simulated audit of fingerprint and iris authentication in welfare delivery</p>
+  {% if data and data.headline %}
+    {% set h = data.headline %}
+    <h1><span class="harm">{{ h.rate|pct }}</span> of visits by people aged {{ h.group }} ended with the service denied.</h1>
+    <p class="lede">That is {{ h.ratio|ratio }} the rate for ages {{ h.reference }}. Rations, pensions, wages and banking
+      often require a biometric match. When the match fails, a genuine beneficiary goes home with nothing.
+      This study measures who carries that cost.</p>
+  {% else %}
+    <h1>Who is turned away when biometric authentication fails?</h1>
+    <p class="lede">Rations, pensions, wages and banking often require a biometric match. When the match fails,
+      a genuine beneficiary goes home with nothing. This study measures who carries that cost.</p>
+  {% endif %}
 </section>
 
 {% include "_filters.html" %}
 
-{% if kpis is none %}
-  <div class="empty-state">No data for this filter</div>
+{% if not data %}
+  <p class="empty">No visits match these filters.</p>
 {% else %}
-<div class="kpi-grid">
-  <div class="kpi">
-    <div class="label">Total attempts</div>
-    <div class="value">{{ kpis.total_attempts|thousands }}</div>
-    <div class="note">{{ kpis.total_visits|thousands }} visits by {{ kpis.total_beneficiaries|thousands }} beneficiaries</div>
+<section class="stats" aria-label="Key numbers">
+  <div class="stat">
+    <p class="stat-label">Genuine attempts rejected</p>
+    <p class="stat-value harm">{{ k.frr|pct }}</p>
+    <p class="stat-note">False rejection rate. Impostors got through on {{ k.far|pct }} of attempts.</p>
   </div>
-  <div class="kpi bad">
-    <div class="label">Attempt failure rate</div>
-    <div class="value">{{ kpis.attempt_failure_rate|pct }}</div>
-    <div class="note">All attempts, genuine and impostor</div>
+  <div class="stat">
+    <p class="stat-label">Genuine visits denied</p>
+    <p class="stat-value">{{ k.visit_denial_rate_genuine|pct }}</p>
+    <p class="stat-note">All three attempts failed, across {{ k.genuine_visits|thousands }} visits.</p>
   </div>
-  <div class="kpi bad">
-    <div class="label">False Rejection Rate</div>
-    <div class="value">{{ kpis.frr|pct }}</div>
-    <div class="note">Genuine users' attempts that were rejected</div>
+  <div class="stat">
+    <p class="stat-label">People turned away</p>
+    <p class="stat-value">{{ k.beneficiaries_denied|thousands }}</p>
+    <p class="stat-note">Of {{ k.total_beneficiaries|thousands }} beneficiaries, denied at least once.</p>
   </div>
-  <div class="kpi good">
-    <div class="label">False Acceptance Rate</div>
-    <div class="value">{{ kpis.far|pct }}</div>
-    <div class="note">Impostor attempts wrongly accepted ({{ kpis.impostor_attempts|thousands }} impostor attempts)</div>
+  <div class="stat">
+    <p class="stat-label">Failures blamed on the body</p>
+    <p class="stat-value">{{ data.families.biometric|pct(0) }}</p>
+    <p class="stat-note">Mismatch or poor capture. The rest are network and device faults.</p>
   </div>
-  <div class="kpi bad">
-    <div class="label">Visits with service denied</div>
-    <div class="value">{{ kpis.visit_denial_rate_all|pct }}</div>
-    <div class="note">{{ kpis.visit_denial_rate_genuine|pct }} of genuine visits; the rest are impostors correctly blocked</div>
-  </div>
-  <div class="kpi bad">
-    <div class="label">Beneficiaries denied at least once</div>
-    <div class="value">{{ kpis.beneficiaries_denied|thousands }}</div>
-    <div class="note">Genuine people turned away on one or more visits</div>
-  </div>
+</section>
+
+<div class="split">
+  <section class="panel">
+    <header class="panel-head">
+      <h2>Denial rate by age</h2>
+      <a class="more" href="{{ url_for('pages.exclusion') }}{{ filter_query }}">Compare other groups</a>
+    </header>
+    <ol class="bars" aria-label="Share of genuine visits denied, by age group">
+      {% for row in data.age %}
+        <li class="bar-row{{ ' is-ref' if row.is_reference }}">
+          <span class="bar-label">{{ row.group }}</span>
+          <span class="bar-track"><span class="bar-fill{{ ' harm' if row.width == 100 }}" style="width: {{ row.width }}%"></span></span>
+          <span class="bar-value">{{ row.rate|pct }}</span>
+        </li>
+      {% endfor %}
+    </ol>
+    <p class="caption">Share of genuine visits where every attempt failed. Bars are scaled to the highest group.</p>
+  </section>
+
+  <section class="panel">
+    <header class="panel-head"><h2>The trade-off</h2></header>
+    <div class="tradeoff">
+      <div>
+        <p class="tradeoff-value harm">{{ k.frr|pct }}</p>
+        <p>of <strong>genuine</strong> attempts are wrongly rejected</p>
+      </div>
+      <div>
+        <p class="tradeoff-value">{{ k.far|pct }}</p>
+        <p>of <strong>impostor</strong> attempts are wrongly accepted</p>
+      </div>
+    </div>
+    <p class="body">A strict match threshold keeps impostors out, but it pushes rejections onto the people the
+      scheme exists to serve. Every point of false rejection is a person asked to prove, again, that they are themselves.</p>
+  </section>
 </div>
 
-<div class="grid grid-2">
-  <div class="card">
-    <h2>How one visit works</h2>
-    <div class="steps">
-      <div class="step"><b>1. Scan</b>The device captures a fingerprint or iris and scores its quality (0-100).</div>
-      <div class="step"><b>2. Match</b>The scan is compared with the stored template. A score below the threshold is rejected.</div>
-      <div class="step"><b>3. Retry</b>Up to three attempts are allowed in one visit.</div>
-      <div class="step"><b>4. Outcome</b>If all attempts fail, the service is <strong>denied</strong> for that visit.</div>
-    </div>
-    <p class="caption"><strong>Key distinction:</strong> FRR measures how often a genuine person is wrongly rejected; FAR measures
-      how often an impostor is wrongly accepted. A strict system keeps FAR low but pushes FRR up, and the cost of
-      FRR falls on the people the welfare scheme is meant to serve.</p>
+<section class="section">
+  <h2 class="section-title">Four gaps, tested</h2>
+  <div class="findings">
+    {% for f in data.findings %}
+      <a class="finding" href="{{ url_for('pages.exclusion', by=f.dimension, **filters.active()) }}">
+        <p class="finding-label">{{ f.label }}</p>
+        {% if f.gap %}
+          <p class="finding-ratio">{{ f.gap.ratio|ratio }}</p>
+          <p class="finding-groups">{{ f.gap.group }} <span>vs</span> {{ f.gap.reference }}</p>
+          <p class="finding-rates">{{ f.gap.rate|pct }} vs {{ f.gap.reference_rate|pct }} of visits denied</p>
+          <p class="badge {{ 'is-sig' if f.significant else 'is-ns' }}">
+            {{ 'Significant' if f.significant else 'Not significant' }} · {{ f.p_value|pvalue }}</p>
+          {% if f.gap.rare_reference %}<p class="finding-note">The reference group is almost never denied, which inflates the ratio.</p>{% endif %}
+        {% else %}
+          <p class="finding-groups">No measurable gap under these filters.</p>
+        {% endif %}
+      </a>
+    {% endfor %}
   </div>
-  <div class="card">
-    <h2>Explore the analysis</h2>
-    <div class="page-links">
-      <a href="{{ url_for('bias') }}{{ ('?' ~ filter_query) if filter_query }}">Who Gets Excluded?<span>Denial rate and FRR by age, occupation, area, gender, state, service</span></a>
-      <a href="{{ url_for('quality') }}{{ ('?' ~ filter_query) if filter_query }}">Biometric Quality<span>Why worn fingerprints fail the threshold</span></a>
-      <a href="{{ url_for('system') }}{{ ('?' ~ filter_query) if filter_query }}">System Failures<span>Network, device and environment</span></a>
-      <a href="{{ url_for('fairness_page') }}{{ ('?' ~ filter_query) if filter_query }}">Fairness Metrics<span>Disparity ratios, four-fifths rule, chi-square</span></a>
-      <a href="{{ url_for('simulator_page') }}">Simulator<span>Try a profile and watch the attempts</span></a>
-      <a href="{{ url_for('methodology') }}">Methodology<span>Assumptions, definitions and limitations</span></a>
-    </div>
-  </div>
-</div>
+</section>
+
+<section class="section">
+  <h2 class="section-title">How one visit works</h2>
+  <ol class="steps">
+    <li><strong>Scan</strong>The device captures a fingerprint or iris and scores its quality from 0 to 100.</li>
+    <li><strong>Match</strong>The scan is compared with the stored template. Below the threshold, it is rejected.</li>
+    <li><strong>Retry</strong>Up to three attempts are allowed in one visit.</li>
+    <li><strong>Outcome</strong>If every attempt fails, the service is denied for that visit.</li>
+  </ol>
+</section>
 {% endif %}
 {% endblock %}

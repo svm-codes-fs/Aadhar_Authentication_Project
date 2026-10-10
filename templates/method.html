@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Method & data{% endblock %}
+
+{# An assumption value, readably: dictionaries become one line per entry. #}
+{% macro show_value(value) %}
+  {%- if value is mapping -%}
+    {%- for key, inner in value.items() -%}
+      {%- if inner is mapping -%}
+        <div><strong>{{ key }}</strong>: {% for k, v in inner.items() %}{{ k }} {{ v }}{{ ", " if not loop.last }}{% endfor %}</div>
+      {%- else -%}
+        <div>{{ key }}: {{ inner[0] ~ "–" ~ inner[1] if inner is sequence and inner is not string else inner }}</div>
+      {%- endif -%}
+    {%- endfor -%}
+  {%- else -%}
+    {{ value }}
+  {%- endif -%}
+{% endmacro %}
+
+{% block content %}
+<section class="page-head">
+  <p class="eyebrow">Method, assumptions, limits</p>
+  <h1>Every finding here was built in on purpose</h1>
+  <p class="lede">The disparities come from documented mechanisms in the simulation, listed below. They are not
+    measurements of the real Aadhaar system. The point is to show <em>how</em> such mechanisms become measurable
+    exclusion, and how standard fairness tests catch it.</p>
+</section>
+
+<div class="split split-wide">
+  <section class="panel">
+    <h2>How the data was generated</h2>
+    <p class="body">A seeded generator (<code>data/generate_aadhaar_auth_dataset.py</code>) invents
+      {{ kpis.total_beneficiaries|thousands }} beneficiaries. Each makes {{ assumptions.visits_per_beneficiary }} visits
+      with up to {{ assumptions.max_attempts_per_visit }} attempts: {{ kpis.total_visits|thousands }} visits and
+      {{ kpis.total_attempts|thousands }} attempts. For every attempt it:</p>
+    <ol class="numbered">
+      <li>Computes <strong>capture quality</strong> (0–100) from occupation, device, conditions and age, plus noise.
+        Iris quality ignores occupation, conditions and age.</li>
+      <li>Checks for a <strong>network timeout</strong>, then a <strong>device error</strong>. Either ends the attempt with no match score.</li>
+      <li>Computes a <strong>match score</strong> that rises with quality for genuine users and stays low for impostors.</li>
+      <li>Rejects quality below {{ assumptions.min_capture_quality }} as <em>poor capture</em>, and scores below
+        {{ "%.2f"|format(threshold) }} as <em>mismatch</em>.</li>
+    </ol>
+    <p class="caption">The original generator was unavailable, so this one is a reconstruction calibrated to the supplied CSV.
+      The analysis always uses the original CSV unchanged.</p>
+  </section>
+
+  <aside class="panel">
+    <h2>Get the data</h2>
+    <p class="body">The full attempt log, {{ kpis.total_attempts|thousands }} rows.</p>
+    <a class="btn btn-block" href="{{ url_for('pages.download_dataset') }}">Download CSV</a>
+    <h3 class="sub">JSON API</h3>
+    <ul class="endpoints">
+      <li><code>GET /api/v1/meta</code></li>
+      <li><code>GET /api/v1/overview</code></li>
+      <li><code>GET /api/v1/exclusion?by=age_group</code></li>
+      <li><code>POST /api/v1/simulate</code></li>
+    </ul>
+    <p class="caption">Filters work as query parameters: <code>state</code>, <code>area_type</code>, <code>service_type</code>.</p>
+  </aside>
+</div>
+
+<section class="section">
+  <h2 class="section-title">Assumptions</h2>
+  <div class="panel scroll-x">
+    <table class="table">
+      <thead><tr><th scope="col">Lever</th><th scope="col">Value</th><th scope="col">Why it matters</th></tr></thead>
+      <tbody>
+        {% for key, note in notes.items() %}
+          <tr><td><code>{{ key }}</code></td><td>{{ show_value(assumptions[key]) }}</td><td>{{ note }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="section">
+  <h2 class="section-title">Definitions</h2>
+  <div class="panel scroll-x">
+    <table class="table">
+      <thead><tr><th scope="col">Metric</th><th scope="col">Definition</th><th scope="col">Population</th></tr></thead>
+      <tbody>
+        <tr><td><strong>False rejection rate</strong></td><td>Rejected attempts ÷ attempts</td><td>Genuine users</td></tr>
+        <tr><td><strong>False acceptance rate</strong></td><td>Accepted attempts ÷ attempts</td><td>Impostors</td></tr>
+        <tr><td><strong>Denial rate</strong></td><td>Visits where every attempt failed ÷ visits</td><td>Genuine visits</td></tr>
+        <tr><td><strong>Biometric vs system</strong></td><td>Mismatch and poor capture vs network timeout and device error</td><td>Failed attempts</td></tr>
+        <tr><td><strong>Disparity ratio</strong></td><td>Group denial rate ÷ reference group's rate</td><td>Genuine visits</td></tr>
+        <tr><td><strong>Four-fifths rule</strong></td><td>Fail if the disparity ratio exceeds {{ "%.2f"|format(limit) }} (1 ÷ 0.8)</td><td>Genuine visits</td></tr>
+        <tr><td><strong>Chi-square test</strong></td><td>Is denial independent of the attribute? p &lt; 0.05 means no</td><td>Genuine visits</td></tr>
+        <tr><td><strong>Odds ratio</strong></td><td>Logistic regression of first-attempt failure; above 1 raises the odds</td><td>Genuine first attempts</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<div class="split">
+  <section class="panel">
+    <h2>Limitations</h2>
+    <ul class="list">
+      <li><strong>Synthetic data.</strong> Every effect size was chosen by the modeller.</li>
+      <li><strong>Assumed bias is found bias.</strong> The analysis recovers the mechanisms put in; it cannot discover new ones.</li>
+      <li><strong>Small groups.</strong> People aged 75+ and iris users are small samples, so their rates are less precise.</li>
+      <li><strong>Simplified matching.</strong> Real systems fuse several fingers and offer OTP fallbacks.</li>
+      <li><strong>No time dimension.</strong> Upgrades, outages and seasons are not modelled.</li>
+      <li><strong>Model.</strong> Effects are additive on the log-odds; within-person correlation is ignored.</li>
+    </ul>
+  </section>
+  <section class="panel">
+    <h2>Recommendations</h2>
+    <ul class="list">
+      <li><strong>Fallback authentication.</strong> OTP, iris or a documented manual override, so no one leaves without their entitlement.</li>
+      <li><strong>Better devices first where they are worst.</strong> Replace low-quality scanners in rural and remote areas.</li>
+      <li><strong>Offline mode.</strong> Authenticate locally when the network is down and reconcile later.</li>
+      <li><strong>Exemptions.</strong> Alternative proof for people aged 75+ and manual workers with worn fingerprints.</li>
+      <li><strong>Monitoring.</strong> Publish denial rates by age, occupation and area, with the four-fifths check.</li>
+    </ul>
+  </section>
+</div>
+{% endblock %}
